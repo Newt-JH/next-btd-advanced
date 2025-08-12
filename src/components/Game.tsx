@@ -67,7 +67,7 @@ function makeTowerByKind(id:number, kind: TowerKind, tile:{x:number;y:number}): 
     case 'DART':   return { ...base, range: 170, fireRate: 1.6, projectileSpeed: 320, damage: 16 } as Tower;
     case 'BOMB':   return { ...base, range: 150, fireRate: 0.9, projectileSpeed: 260, damage: 20, aoeRadius: 64 } as Tower;
     case 'ICE':    return { ...base, range: 140, fireRate: 0.8, projectileSpeed: 220, damage: 8,  slowPct: 0.35, slowDuration: 1.8 } as Tower;
-    case 'SNIPER': return { ...base, range: 9999, fireRate: 0.7, projectileSpeed: 9999, damage: 48 } as Tower;
+    case 'SNIPER': return { ...base, range: 300, fireRate: 1.6, projectileSpeed: 320, damage: 48 } as Tower;
   }
 }
 
@@ -77,7 +77,7 @@ function applyUpgrade(t: Tower): Tower {
     case 'DART':   n.damage = Math.round(t.damage * 1.22); n.fireRate = +(t.fireRate * 1.1).toFixed(2); n.range = t.range + 10; break;
     case 'BOMB':   n.damage = Math.round(t.damage * 1.25); n.aoeRadius = (t.aoeRadius ?? 60) + 6; n.fireRate = +(t.fireRate * 1.05).toFixed(2); break;
     case 'ICE':    n.slowPct = clamp((t.slowPct ?? 0.3) + 0.05, 0, 0.7); n.slowDuration = (t.slowDuration ?? 1.2) + 0.2; n.range = t.range + 8; break;
-    case 'SNIPER': n.damage = Math.round(t.damage * 1.3); n.fireRate = +(t.fireRate * 1.08).toFixed(2); break;
+    case 'SNIPER': n.damage = Math.round(t.damage * 1.3); n.fireRate = +(t.fireRate * 1.08).toFixed(2); n.range = t.range + 10; break;
   }
   return n;
 }
@@ -409,6 +409,7 @@ function spawnWave(s: GameState) {
         aoeRadius: t.aoeRadius,
         slowPct: t.slowPct,
         slowDuration: t.slowDuration,
+        spawnTime: performance.now(), // ✅ 발사 시각 저장
       };
       s.projectiles.push(proj);
       t.cooldown = 1 / t.fireRate;
@@ -418,19 +419,19 @@ function spawnWave(s: GameState) {
     for (const p of s.projectiles) {
       if (!p.alive) continue;
   
-      if (p.kind === 'SNIPER') {
-        // 즉시 타격
-        const target = s.enemies.find((e) => e.id === p.targetId && e.hp > 0);
-        if (target) {
-          target.hp -= p.damage;
-          if (target.hp <= 0) {
-            s.cash += target.reward
-            s.score += target.reward;
-          };
-        }
-        p.alive = false;
-        continue;
-      }
+      // if (p.kind === 'SNIPER') {
+      //   // 즉시 타격
+      //   const target = s.enemies.find((e) => e.id === p.targetId && e.hp > 0);
+      //   if (target) {
+      //     target.hp -= p.damage;
+      //     if (target.hp <= 0) {
+      //       s.cash += target.reward
+      //       s.score += target.reward;
+      //     };
+      //   }
+      //   p.alive = false;
+      //   continue;
+      // }
   
       const target = s.enemies.find((e) => e.id === p.targetId && e.hp > 0);
       if (!target) {
@@ -568,13 +569,33 @@ function spawnWave(s: GameState) {
   
     // 투사체
     for (const p of s.projectiles) {
+      if (p.kind === 'SNIPER') {
+        const elapsed = performance.now() - (p.spawnTime ?? 0);
+        if (elapsed <= 100) { // 0.1초 동안만 그리기
+          const target = s.enemies.find((e) => e.id === p.targetId && e.hp > 0);
+          if (target) {
+            ctx.strokeStyle = '#cc66ff';
+            ctx.lineWidth = 2;
+            ctx.beginPath();
+            ctx.moveTo(p.pos.x, p.pos.y);
+            ctx.lineTo(target.pos.x, target.pos.y);
+            ctx.stroke();
+          }
+        }
+        continue; // SNIPER는 여기서만 그림
+      }
+    
+      // 나머지 투사체
       ctx.fillStyle =
-        p.kind === 'AOE' ? COLORS.bomb : p.kind === 'SLOW' ? COLORS.ice : COLORS.dart;
+        p.kind === 'AOE'
+          ? COLORS.bomb
+          : p.kind === 'SLOW'
+          ? COLORS.ice
+          : COLORS.dart;
       ctx.beginPath();
       ctx.arc(p.pos.x, p.pos.y, 5, 0, Math.PI * 2);
       ctx.fill();
     }
-  
     // HUD
     ctx.fillStyle = '#9aa5b1';
     ctx.font = '12px ui-monospace, SFMono-Regular, Menlo, monospace';

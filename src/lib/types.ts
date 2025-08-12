@@ -49,6 +49,7 @@ export type Projectile = {
   aoeRadius?: number;
   slowPct?: number;
   slowDuration?: number;
+  spawnTime?: number; // ✅ 발사 시각 (레이저 반짝용)
 };
 
 export type ShopItem = {
