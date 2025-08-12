@@ -423,7 +423,10 @@ function spawnWave(s: GameState) {
         const target = s.enemies.find((e) => e.id === p.targetId && e.hp > 0);
         if (target) {
           target.hp -= p.damage;
-          if (target.hp <= 0) s.cash += target.reward;
+          if (target.hp <= 0) {
+            s.cash += target.reward
+            s.score += target.reward;
+          };
         }
         p.alive = false;
         continue;
@@ -446,13 +449,19 @@ function spawnWave(s: GameState) {
             if (e.hp <= 0) continue;
             if (dist(e.pos, target.pos) <= (p.aoeRadius ?? 60)) {
               e.hp -= p.damage;
-              if (e.hp <= 0) s.cash += e.reward;
+              if (target.hp <= 0) {
+                s.cash += target.reward
+                s.score += target.reward;
+              };
             }
           }
         } else if (p.kind === 'SLOW') {
           if (!target.immuneSlow) {
             target.hp -= p.damage;
-            if (target.hp <= 0) s.cash += target.reward;
+            if (target.hp <= 0) {
+              s.cash += target.reward
+              s.score += target.reward;
+            }
             else {
               const factor = 1 - (p.slowPct ?? 0.3);
               target.slowFactor = factor;
@@ -463,11 +472,17 @@ function spawnWave(s: GameState) {
           } else {
             // 면역이면 데미지만
             target.hp -= p.damage;
-            if (target.hp <= 0) s.cash += target.reward;
+            if (target.hp <= 0) {
+              s.cash += target.reward
+              s.score += target.reward;
+            };
           }
         } else {
           target.hp -= p.damage;
-          if (target.hp <= 0) s.cash += target.reward;
+          if (target.hp <= 0) {
+            s.cash += target.reward
+            s.score += target.reward;
+          };
         }
         p.alive = false;
       } else {
@@ -664,7 +679,7 @@ function drawEnemy(ctx: CanvasRenderingContext2D, e: Enemy) {
       ctx.fillStyle = '#93c5fd';
       ctx.font = '10px ui-monospace';
       ctx.textAlign = 'center';
-      ctx.fillText('IMM', 0, -r - 16);
+      ctx.fillText('슬로우 면역', 0, -r - 16);
     }
   
     ctx.restore();

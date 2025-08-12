@@ -49,20 +49,20 @@ export const ROUND_PLAN: {
   waves: { tier: EnemyTier; count: number; gap: number }[];
 }[] = [
   // 1
-  { waves: [ { tier: 'RED',   count: 10, gap: 0.90 } ] },
+  { waves: [ { tier: 'RED',   count: 10, gap: 0.30 } ] },
   // 2
-  { waves: [ { tier: 'BLUE',  count: 12, gap: 0.80 } ] },
+  { waves: [ { tier: 'BLUE',  count: 12, gap: 0.40 } ] },
   // 3
   { waves: [
-      { tier: 'RED',   count: 8,  gap: 0.85 },
-      { tier: 'BLUE',  count: 8,  gap: 0.75 },
+      { tier: 'RED',   count: 8,  gap: 0.30 },
+      { tier: 'BLUE',  count: 8,  gap: 0.40 },
     ] },
   // 4
   { waves: [ { tier: 'GREEN', count: 14, gap: 0.70 } ] },
   // 5
   { waves: [
       { tier: 'BLUE',  count: 10, gap: 0.70 },
-      { tier: 'GREEN', count: 10, gap: 0.65 },
+      { tier: 'GREEN', count: 10, gap: 0.50 },
     ] },
   // 6
   { waves: [ { tier: 'YELLOW',count: 14, gap: 0.60 } ] },
