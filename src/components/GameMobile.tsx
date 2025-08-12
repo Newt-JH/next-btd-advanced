@@ -14,6 +14,7 @@ const CONTROL_POINTS = CONTROL_TILES.map(tileToPx);
 const PATH_POINTS = catmullRomSpline(CONTROL_POINTS, 900);
 const ARC_TABLE = buildArcLengthTable(PATH_POINTS);
 
+// ... (utility functions are unchanged) ...
 function isOnPathTile(tile:{x:number;y:number}): boolean {
   const center = { x: tile.x*TILE+TILE/2, y: tile.y*TILE+TILE/2 };
   const r = TILE*0.45;
@@ -82,7 +83,7 @@ function applyUpgrade(t: Tower): Tower {
   return n;
 }
 
-export default function Game() {
+export default function GameMobile() {
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const [shopSel, setShopSel] = useState<ShopItem>(SHOP[0]);
   const shopSelRef = useRef<ShopItem>(SHOP[0]);
@@ -99,16 +100,31 @@ export default function Game() {
     score: 0, gameOver: false, gameResult: undefined, grade: undefined,
   });
 
-  const containerRef = useRef<HTMLDivElement | null>(null);
+  const canvasWrapperRef = useRef<HTMLDivElement | null>(null);
   const [scale, setScale] = useState(1);
   useEffect(() => {
     const onResize = () => {
-      const w = containerRef.current?.clientWidth ?? CANVAS_W;
-      setScale(Math.min(1, w / (CANVAS_W + 280)));
+      const wrapper = canvasWrapperRef.current;
+      if (wrapper) {
+        const w = wrapper.clientWidth;
+        const h = wrapper.clientHeight;
+        const scaleX = w / CANVAS_W;
+        const scaleY = h / CANVAS_H;
+        setScale(Math.min(scaleX, scaleY));
+      }
     };
     onResize();
+    const observer = new ResizeObserver(onResize);
+    if (canvasWrapperRef.current) {
+      observer.observe(canvasWrapperRef.current);
+    }
     window.addEventListener('resize', onResize);
-    return () => window.removeEventListener('resize', onResize);
+    return () => {
+      if (canvasWrapperRef.current) {
+        observer.unobserve(canvasWrapperRef.current);
+      }
+      window.removeEventListener('resize', onResize);
+    };
   }, []);
 
   useEffect(() => {
@@ -116,14 +132,14 @@ export default function Game() {
     const rectOf = () => cvs.getBoundingClientRect();
     const onMove = (e: MouseEvent) => {
       const r = rectOf();
-      const pxPos = { x: (e.clientX - r.left) / scale, y: (e.clientY - r.top) / scale };
-      const tile = snapToTile(pxPos);
+      const pxPos = { x: (e.clientX - r.left), y: (e.clientY - r.top) };
+      const tile = snapToTile({ x: (pxPos.x - (r.width/2 - CANVAS_W*scale/2))/scale, y: (pxPos.y - (r.height/2 - CANVAS_H*scale/2))/scale });
       stateRef.current.hoveredTile = tile;
     };
     const onClick = (e: MouseEvent) => {
       const r = rectOf();
-      const pxPos = { x: (e.clientX - r.left) / scale, y: (e.clientY - r.top) / scale };
-      const tile = snapToTile(pxPos);
+      const pxPos = { x: (e.clientX - r.left), y: (e.clientY - r.top) };
+      const tile = snapToTile({ x: (pxPos.x - (r.width/2 - CANVAS_W*scale/2))/scale, y: (pxPos.y - (r.height/2 - CANVAS_H*scale/2))/scale });
       onCanvasClick(tile);
     };
     cvs.addEventListener('mousemove', onMove);
@@ -143,7 +159,7 @@ export default function Game() {
     const loop = (t: number) => {
       const dt = (t - last) / 1000; last = t;
       step(stateRef.current, dt);
-      draw(ctx, stateRef.current, scale);
+      draw(ctx, stateRef.current);
       if (Math.floor(t/100) !== Math.floor((t-dt*1000)/100)) {
         const s = stateRef.current;
         setHud({ cash: s.cash, lives: s.lives, round: s.round, inCombat: s.inCombat });
@@ -152,7 +168,7 @@ export default function Game() {
     };
     raf = requestAnimationFrame(loop);
     return () => cancelAnimationFrame(raf);
-  }, [scale]);
+  }, []);
 
   const startRound = () => {
     const s = stateRef.current;
@@ -171,7 +187,7 @@ export default function Game() {
     if (s.inCombat) return;
     if (s.towers.some(t => t.tile.x === tile.x && t.tile.y === tile.y)) return;
   
-    const selectedItem = shopSelRef.current; // ✅ ref 사용
+    const selectedItem = shopSelRef.current;
     const cost = selectedItem.cost;
     if (s.cash < cost) return;
   
@@ -224,30 +240,45 @@ export default function Game() {
   };
 
   return (
-    <div ref={containerRef} style={{ display: 'grid', gridTemplateColumns: '280px 1fr', gap: 12, alignItems: 'start', transform: `scale(${scale})`, transformOrigin: 'top left' }}>
-      {/* 좌측 패널 */}
-      <div style={{ background: COLORS.panel, border: `1px solid ${COLORS.panelBorder}`, borderRadius: 12, padding: 12 }}>
+    <div style={{ display: 'flex', flexDirection: 'column', height: '100vh', background: COLORS.bg }}>
+      {/* Canvas Wrapper */}
+      <div ref={canvasWrapperRef} style={{ flex: '1 1 auto', position: 'relative', overflow: 'hidden' }}>
+        <canvas 
+          ref={canvasRef} 
+          width={CANVAS_W} 
+          height={CANVAS_H} 
+          style={{ 
+            position: 'absolute',
+            top: '50%',
+            left: '50%',
+            transform: `translate(-50%, -50%) scale(${scale})`,
+            transformOrigin: 'center center',
+          }} 
+        />
+      </div>
+      {/* Bottom Panel */}
+      <div style={{ flex: '0 0 auto', background: COLORS.panel, borderTop: `1px solid ${COLORS.panelBorder}`, padding: 12, overflowY: 'auto' }}>
         <div style={{ display:'flex', justifyContent:'space-between', marginBottom: 8 }}>
           <strong>라운드 {hud.round}</strong>
           <span>💰 {hud.cash} • ❤️ {hud.lives}</span>
         </div>
         <div style={{ marginBottom: 8, fontSize: 13, opacity: 0.85 }}>
-  점수: {stateRef.current.score}
-</div>
-<button
-  onClick={startRound}
-  disabled={hud.inCombat || stateRef.current.gameOver || stateRef.current.round > TOTAL_ROUNDS}
-  style={{ width:'100%', padding:'10px 12px', borderRadius:10, border:`1px solid ${COLORS.panelBorder}`, background: (hud.inCombat || stateRef.current.round > TOTAL_ROUNDS) ? '#1f2937' : '#1b2a45', color: COLORS.text }}
->
-  {hud.inCombat
-    ? '전투 중...'
-    : (stateRef.current.round > TOTAL_ROUNDS ? '모든 라운드 완료' : '라운드 시작')}
-</button>
-        {/* 상점 */}
+          점수: {stateRef.current.score}
+        </div>
+        <button
+          onClick={startRound}
+          disabled={hud.inCombat || stateRef.current.gameOver || stateRef.current.round > TOTAL_ROUNDS}
+          style={{ width:'100%', padding:'10px 12px', borderRadius:10, border:`1px solid ${COLORS.panelBorder}`, background: (hud.inCombat || stateRef.current.round > TOTAL_ROUNDS) ? '#1f2937' : '#1b2a45', color: COLORS.text }}
+        >
+          {hud.inCombat
+            ? '전투 중...'
+            : (stateRef.current.round > TOTAL_ROUNDS ? '모든 라운드 완료' : '라운드 시작')}
+        </button>
+        {/* Shop */}
         <h3 style={{ margin: '12px 0 6px', fontSize: 14 }}>상점</h3>
-        <div style={{ display: 'grid', gap: 8 }}>
+        <div style={{ display: 'grid', gap: 8, gridTemplateColumns: '1fr 1fr' }}>
           {SHOP.map(item => (
-            <button key={item.kind} onClick={()=>setShopSel(item)} style={{ textAlign:'left', padding:10, borderRadius:10, border:`1px solid ${shopSel.kind===item.kind ? '#415a8b' : COLORS.panelBorder}`, background: shopSel.kind===item.kind ? '#15223b' : '#0f172a', color: COLORS.text }}>
+            <button key={item.kind} onClick={()=>setShopSel(item)} style={{ flex: '0 0 150px', textAlign:'left', padding:10, borderRadius:10, border:`1px solid ${shopSel.kind===item.kind ? '#415a8b' : COLORS.panelBorder}`, background: shopSel.kind===item.kind ? '#15223b' : '#0f172a', color: COLORS.text }}>
               <div style={{ display:'flex', justifyContent:'space-between' }}>
                 <span>{item.name}</span>
                 <span>💰{item.cost}</span>
@@ -256,7 +287,7 @@ export default function Game() {
             </button>
           ))}
         </div>
-        {/* 선택 타워 */}
+        {/* Selected Tower */}
         <h3 style={{ margin: '12px 0 6px', fontSize: 14 }}>선택 타워</h3>
         {selectedTower ? (
           <div style={{ border: `1px solid ${COLORS.panelBorder}`, borderRadius: 10, padding: 10 }}>
@@ -273,37 +304,37 @@ export default function Game() {
           <div style={{ fontSize: 12, opacity: 0.7 }}>타워를 선택하세요.</div>
         )}
       </div>
-      {/* 게임 캔버스 */}
-          <canvas ref={canvasRef} width={CANVAS_W} height={CANVAS_H} style={{ width: CANVAS_W, height: CANVAS_H, background: COLORS.bg, border: `1px solid ${COLORS.panelBorder}`, borderRadius: 12 }} />
-          {stateRef.current.gameOver && (
-  <div style={{
-    position:'fixed', inset:0, background:'rgba(0,0,0,0.55)',
-    display:'flex', alignItems:'center', justifyContent:'center', zIndex:50
-  }}>
-    <div style={{
-      width:380, background:'#0f172a', border:`1px solid ${COLORS.panelBorder}`,
-      borderRadius:12, padding:16, color:COLORS.text, boxShadow:'0 10px 40px rgba(0,0,0,0.5)'
-    }}>
-      <h2 style={{margin:'0 0 8px'}}>
-        {stateRef.current.gameResult === 'CLEAR' ? 'Game Clear' : 'Game Over'}
-      </h2>
-      <div style={{opacity:0.9, marginBottom:12, lineHeight:1.6}}>
-        점수: <strong>{stateRef.current.score}</strong><br/>
-        등급: <strong style={{fontSize:18}}>{stateRef.current.grade}</strong>
-      </div>
-      <button onClick={resetGame} style={{
-        width:'100%', padding:'10px 12px', borderRadius:10,
-        border:`1px solid ${COLORS.panelBorder}`, background:'#1b2a45',
-        color:COLORS.text, cursor:'pointer'
-      }}>
-        다시 하기
-      </button>
+      {stateRef.current.gameOver && (
+        <div style={{
+          position:'fixed', inset:0, background:'rgba(0,0,0,0.55)',
+          display:'flex', alignItems:'center', justifyContent:'center', zIndex:50
+        }}>
+          <div style={{
+            width:380, background:'#0f172a', border:`1px solid ${COLORS.panelBorder}`,
+            borderRadius:12, padding:16, color:COLORS.text, boxShadow:'0 10px 40px rgba(0,0,0,0.5)'
+          }}>
+            <h2 style={{margin:'0 0 8px'}}>
+              {stateRef.current.gameResult === 'CLEAR' ? 'Game Clear' : 'Game Over'}
+            </h2>
+            <div style={{opacity:0.9, marginBottom:12, lineHeight:1.6}}>
+              점수: <strong>{stateRef.current.score}</strong><br/>
+              등급: <strong style={{fontSize:18}}>{stateRef.current.grade}</strong>
+            </div>
+            <button onClick={resetGame} style={{
+              width:'100%', padding:'10px 12px', borderRadius:10,
+              border:`1px solid ${COLORS.panelBorder}`, background:'#1b2a45',
+              color:COLORS.text, cursor:'pointer'
+            }}>
+              다시 하기
+            </button>
+          </div>
+        </div>
+      )}
     </div>
-  </div>
-)}
-      </div>
   );
 }
+
+// ... (rest of the functions are identical and omitted for brevity) ...
 
 // ------------ 웨이브 스폰 ------------
 function spawnWave(s: GameState) {
@@ -316,12 +347,11 @@ function spawnWave(s: GameState) {
   const schedule: { at: number; enemy: Enemy }[] = [];
   let spawnTime = startTime;
 
-  // ✅ 라운드 내 여러 웨이브를 순차 스케줄링
   for (const wave of plan.waves) {
     for (let i = 0; i < wave.count; i++) {
       const enemy = makeEnemyByTier(s.nextEnemyId++, wave.tier);
       schedule.push({ at: spawnTime, enemy });
-      spawnTime += wave.gap * 1000; // 개별 gap 적용
+      spawnTime += wave.gap * 1000;
     }
   }
 
@@ -333,7 +363,6 @@ function spawnWave(s: GameState) {
     const now = performance.now();
     const toRemove: number[] = [];
 
-    // 스폰 처리
     const sch: { at: number; enemy: Enemy }[] = s._spawnSchedule || [];
     while (sch.length && sch[0].at <= now) {
       const item = sch.shift()!;
@@ -342,9 +371,7 @@ function spawnWave(s: GameState) {
     
     s._spawnSchedule = sch;
   
-    // 적 이동 (스플라인 pathT 증가)
     for (const e of s.enemies) {
-      // 슬로우 만료
       if (e.slowUntil && now > e.slowUntil) {
         e.slowUntil = undefined;
         e.slowFactor = undefined;
@@ -374,7 +401,6 @@ function spawnWave(s: GameState) {
     if (toRemove.length) {
       s.enemies = s.enemies.filter(en => !toRemove.includes(en.id));
     }
-    // 타워 사격
     for (const t of s.towers) {
       t.cooldown -= dt;
       if (t.cooldown > 0) continue;
@@ -384,13 +410,11 @@ function spawnWave(s: GameState) {
       );
       if (!targets.length) continue;
   
-      // 우선순위: 더 앞선 적(pathT 큰 순) → 거리 짧은 순
       targets.sort(
         (a, b) => b.pathT - a.pathT || dist(t.pos, a.pos) - dist(t.pos, b.pos)
       );
       const target = targets[0];
   
-      // 발사체 생성
       const proj: Projectile = {
         id: s.nextProjId++,
         kind:
@@ -409,29 +433,14 @@ function spawnWave(s: GameState) {
         aoeRadius: t.aoeRadius,
         slowPct: t.slowPct,
         slowDuration: t.slowDuration,
-        spawnTime: performance.now(), // ✅ 발사 시각 저장
+        spawnTime: performance.now(),
       };
       s.projectiles.push(proj);
       t.cooldown = 1 / t.fireRate;
     }
   
-    // 투사체 이동 & 충돌
     for (const p of s.projectiles) {
       if (!p.alive) continue;
-  
-      // if (p.kind === 'SNIPER') {
-      //   // 즉시 타격
-      //   const target = s.enemies.find((e) => e.id === p.targetId && e.hp > 0);
-      //   if (target) {
-      //     target.hp -= p.damage;
-      //     if (target.hp <= 0) {
-      //       s.cash += target.reward
-      //       s.score += target.reward;
-      //     };
-      //   }
-      //   p.alive = false;
-      //   continue;
-      // }
   
       const target = s.enemies.find((e) => e.id === p.targetId && e.hp > 0);
       if (!target) {
@@ -444,7 +453,6 @@ function spawnWave(s: GameState) {
       const len = Math.hypot(dx, dy);
   
       if (len < target.radius + 4) {
-        // 히트 처리
         if (p.kind === 'AOE') {
           for (const e of s.enemies) {
             if (e.hp <= 0) continue;
@@ -471,7 +479,6 @@ function spawnWave(s: GameState) {
                 performance.now() + (p.slowDuration ?? 1.5) * 1000;
             }
           } else {
-            // 면역이면 데미지만
             target.hp -= p.damage;
             if (target.hp <= 0) {
               s.cash += target.reward
@@ -487,33 +494,27 @@ function spawnWave(s: GameState) {
         }
         p.alive = false;
       } else {
-        // 추적 이동
         p.pos.x += (dx / len) * p.speed * dt;
         p.pos.y += (dy / len) * p.speed * dt;
       }
     }
   
-    // 정리
     s.projectiles = s.projectiles.filter((p) => p.alive);
     s.enemies = s.enemies.filter((e) => e.hp > 0);
   
-    // 라운드 종료 판정
     const noIncoming = (s._spawnSchedule?.length ?? 0) === 0;
     if (!s.gameOver && s.inCombat && noIncoming && s.enemies.length === 0) {
     s.inCombat = false;
 
-    // ✅ 라운드 성공 보상: 라운드 * 10
     s.cash += s.round * 10;
 
-    // ✅ 마지막 라운드면 게임 클리어 모달
     if (s.round >= TOTAL_ROUNDS) {
         s.gameOver = true;
         s.gameResult = 'CLEAR';
-        s.grade = calcGrade(s.score); // 누적 점수로 등급 산정
+        s.grade = calcGrade(s.score);
         return;
     }
 
-    // 다음 라운드로 진행
     s.round += 1;
     }
   }
@@ -522,19 +523,13 @@ function spawnWave(s: GameState) {
   function draw(
     ctx: CanvasRenderingContext2D,
     s: GameState,
-    scale: number,
   ) {
     const W = CANVAS_W;
     const H = CANVAS_H;
   
-    // 1️⃣ 스케일 적용 전에 전체 지우기
     ctx.setTransform(1, 0, 0, 1, 0, 0);
     ctx.clearRect(0, 0, W, H);
   
-    // 2️⃣ 다시 스케일 적용
-    ctx.setTransform(scale, 0, 0, scale, 0, 0);
-  
-    // 배경 + 그리드
     ctx.fillStyle = COLORS.bg;
     ctx.fillRect(0, 0, W, H);
     ctx.strokeStyle = COLORS.grid;
@@ -545,7 +540,6 @@ function spawnWave(s: GameState) {
       }
     }
   
-    // 경로
     ctx.lineCap = 'round';
     ctx.lineWidth = TILE * 0.8;
     ctx.strokeStyle = COLORS.path;
@@ -554,24 +548,20 @@ function spawnWave(s: GameState) {
     for (let i = 1; i < PATH_POINTS.length; i++) ctx.lineTo(PATH_POINTS[i].x, PATH_POINTS[i].y);
     ctx.stroke();
   
-    // 호버 타일
     if (s.hoveredTile) {
       const { x, y } = s.hoveredTile;
       ctx.fillStyle = 'rgba(148,163,184,0.12)';
       ctx.fillRect(x * TILE, y * TILE, TILE, TILE);
     }
   
-    // 타워
     for (const t of s.towers) drawTower(ctx, t);
   
-    // 적
     for (const e of s.enemies) drawEnemy(ctx, e);
   
-    // 투사체
     for (const p of s.projectiles) {
       if (p.kind === 'SNIPER') {
         const elapsed = performance.now() - (p.spawnTime ?? 0);
-        if (elapsed <= 100) { // 0.1초 동안만 그리기
+        if (elapsed <= 100) {
           const target = s.enemies.find((e) => e.id === p.targetId && e.hp > 0);
           if (target) {
             ctx.strokeStyle = '#cc66ff';
@@ -582,10 +572,9 @@ function spawnWave(s: GameState) {
             ctx.stroke();
           }
         }
-        continue; // SNIPER는 여기서만 그림
+        continue;
       }
     
-      // 나머지 투사체
       ctx.fillStyle =
         p.kind === 'AOE'
           ? COLORS.bomb
@@ -596,7 +585,6 @@ function spawnWave(s: GameState) {
       ctx.arc(p.pos.x, p.pos.y, 5, 0, Math.PI * 2);
       ctx.fill();
     }
-    // HUD
     ctx.fillStyle = '#9aa5b1';
     ctx.font = '12px ui-monospace, SFMono-Regular, Menlo, monospace';
     ctx.textAlign = 'right';
@@ -607,13 +595,11 @@ function spawnWave(s: GameState) {
     ctx.save();
     ctx.translate(t.pos.x, t.pos.y);
   
-    // 그림자
     ctx.fillStyle = 'rgba(0,0,0,0.25)';
     ctx.beginPath();
     ctx.ellipse(0, 14, 18, 8, 0, 0, Math.PI * 2);
     ctx.fill();
   
-    // 색상
     const baseColor =
       t.kind === 'DART'
         ? COLORS.dart
@@ -623,13 +609,11 @@ function spawnWave(s: GameState) {
         ? COLORS.ice
         : COLORS.sniper;
   
-    // 사거리
     ctx.fillStyle = `${baseColor}22`;
     ctx.beginPath();
     ctx.arc(0, 0, t.range, 0, Math.PI * 2);
     ctx.fill();
   
-    // 본체
     const basePath = makePath2D(SVG_TOWER_BASE);
     const barrel = makePath2D(SVG_TOWER_BARREL);
     const g = ctx.createLinearGradient(-14, -10, 14, 10);
@@ -646,7 +630,6 @@ function spawnWave(s: GameState) {
     ctx.strokeStyle = '#0b0f1a';
     ctx.stroke(barrel);
   
-    // 아이콘
     ctx.strokeStyle = baseColor;
     ctx.lineWidth = 2;
     if (t.kind === 'BOMB') ctx.stroke(makePath2D(SVG_BOMB_ICON));
@@ -661,7 +644,6 @@ function drawEnemy(ctx: CanvasRenderingContext2D, e: Enemy) {
     ctx.save();
     ctx.translate(e.pos.x, e.pos.y);
   
-    // 몸체(풍선 느낌)
     const fill = COLORS.enemy[e.tier];
     const r = e.radius;
     const g = ctx.createRadialGradient(-r * 0.3, -r * 0.4, r * 0.1, 0, 0, r);
@@ -669,10 +651,9 @@ function drawEnemy(ctx: CanvasRenderingContext2D, e: Enemy) {
     g.addColorStop(1, fill);
     ctx.fillStyle = g;
     ctx.beginPath();
-    ctx.ellipse(0, 0, r, r * 1.1, 0, 0, Math.PI * 2); // ✅ 7개 이상
+    ctx.ellipse(0, 0, r, r * 1.1, 0, 0, Math.PI * 2);
     ctx.fill();
   
-    // 하이라이트/꼬리
     ctx.strokeStyle = '#ffffff55';
     ctx.lineWidth = 1.2;
     ctx.beginPath();
@@ -686,7 +667,6 @@ function drawEnemy(ctx: CanvasRenderingContext2D, e: Enemy) {
     ctx.lineTo(0, r * 1.3);
     ctx.stroke();
   
-    // HP bar
     const w = 28,
       h = 5;
     ctx.fillStyle = '#0b0f1a';
@@ -695,7 +675,6 @@ function drawEnemy(ctx: CanvasRenderingContext2D, e: Enemy) {
     const hpw = w * clamp(e.hp, 0, e.maxHp) / e.maxHp;
     ctx.fillRect(-w / 2, -r - 12, hpw, h);
   
-    // 슬로우 면역 표시
     if (e.immuneSlow) {
       ctx.fillStyle = '#93c5fd';
       ctx.font = '10px ui-monospace';
@@ -705,4 +684,3 @@ function drawEnemy(ctx: CanvasRenderingContext2D, e: Enemy) {
   
     ctx.restore();
   }
-  
